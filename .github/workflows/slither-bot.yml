@@ -1,0 +1,56 @@
+name: Slither Bot Monitor
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run Slither Bot for 55 minutes
+        run: |
+          import requests, time
+          WEBHOOK_URL = "https://discord.com/api/webhooks/1505020954638553179/MA5J5g4DDBVlQuOylUeZX1qeroTpzU4G5E3LcmyeOUTnE-0KjlcaW6uEQWEsXuf35cNa"
+          API_URL = "https://slithermania.com.br/api/public/ranking-live"
+          SCORE_LIMITE = 45000
+          INTERVALO = 30
+          DURACAO = 55 * 60
+          def fmt(s): return f"{s:,}".replace(",",".")
+          def alerta(nick,clan,score,lugar,slot_id,sk):
+              ct=f" [{clan}]" if clan else ""
+              embed={"title":"Slither ALERTA - Ranker acima de 45.000!","color":0x00FF88,"fields":[{"name":"Jogador","value":f"**{nick}**{ct}","inline":True},{"name":"Score Atual","value":f"**{fmt(score)} pontos**","inline":True},{"name":"Posicao","value":f"#{lugar}","inline":True},{"name":"Servidor","value":f"Slot {slot_id} - {sk}","inline":False}],"footer":{"text":"Slither Monitor - slithermania.com.br"},"timestamp":time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime())}
+              payload={"content":"@everyone","username":"Slither Monitor","embeds":[embed],"allowed_mentions":{"parse":["everyone"]}}
+              try:
+                  r=requests.post(WEBHOOK_URL,json=payload,timeout=10)
+                  print(f"Alerta: {nick} - {fmt(score)} pts [{r.status_code}]")
+              except Exception as e: print(f"Erro: {e}")
+          def verificar():
+              try:
+                  r=requests.get(API_URL,timeout=10); r.raise_for_status(); dados=r.json()
+              except Exception as e: print(f"Erro API: {e}"); return
+              for slot in dados.get("slots",[]):
+                  sid=slot.get("slotId"); sk=slot.get("serverKey","?")
+                  for j in slot.get("top10",[]):
+                      if j.get("score",0)>SCORE_LIMITE:
+                          alerta(j.get("nick","?"),j.get("clan",""),j.get("score",0),j.get("place",0),sid,sk)
+          print("Slither Monitor iniciado!")
+          t=time.time()
+          while time.time()-t<DURACAO:
+              print(f"Verificando... {time.strftime('%H:%M:%S')}"); verificar(); time.sleep(INTERVALO)
+          print("Ciclo encerrado.")
+        shell: python
