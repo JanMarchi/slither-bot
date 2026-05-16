@@ -1,0 +1,121 @@
+#!/usr/bin/env python3
+"""
+Script de setup - execute no terminal para criar e fazer push dos arquivos para o GitHub
+"""
+import os
+import subprocess
+
+# Conteúdo dos arquivos
+SLITHER_BOT = '''import requests
+import time
+
+WEBHOOK_URL = "https://discord.com/api/webhooks/1505020954638553179/MA5J5g4DDBVlQuOylUeZX1qeroTpzU4G5E3LcmyeOUTnE-0KjlcaW6uEQWEsXuf35cNa"
+API_URL = "https://slithermania.com.br/api/public/ranking-live"
+SCORE_LIMITE = 50000
+INTERVALO_VERIFICACAO = 30
+
+notificados = {}
+
+def formatar_score(score):
+    return f"{score:,}".replace(",", ".")
+
+def enviar_alerta(nick, clan, score, lugar, slot_id, server_key):
+    clan_texto = f" [{clan}]" if clan else ""
+    embed = {
+        "title": "Slither ALERTA - Ranker acima de 50.000!",
+        "color": 0x00FF88,
+        "fields": [
+            {"name": "Jogador", "value": f"**{nick}**{clan_texto}", "inline": True},
+            {"name": "Score", "value": f"**{formatar_score(score)} pontos**", "inline": True},
+            {"name": "Posicao", "value": f"#{lugar}", "inline": True},
+            {"name": "Servidor", "value": f"Slot {slot_id} - {server_key}", "inline": False},
+        ],
+        "footer": {"text": "Slither Monitor - slithermania.com.br"},
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    payload = {"username": "Slither Monitor", "embeds": [embed]}
+    try:
+        r = requests.post(WEBHOOK_URL, json=payload, timeout=10)
+        if r.status_code in (200, 204):
+            print(f"  Alerta enviado: {nick} - {formatar_score(score)} pts")
+        else:
+            print(f"  Webhook retornou {r.status_code}: {r.text}")
+    except Exception as e:
+        print(f"  Erro: {e}")
+
+def verificar_ranking():
+    try:
+        r = requests.get(API_URL, timeout=10)
+        r.raise_for_status()
+        dados = r.json()
+    except Exception as e:
+        print(f"Erro ao buscar API: {e}")
+        return
+    slots = dados.get("slots", [])
+    for slot in slots:
+        slot_id = slot.get("slotId")
+        server_key = slot.get("serverKey", "?")
+        top10 = slot.get("top10", [])
+        for jogador in top10:
+            nick = jogador.get("nick", "?")
+            clan = jogador.get("clan", "")
+            score = jogador.get("score", 0)
+            lugar = jogador.get("place", 0)
+            if score <= SCORE_LIMITE:
+                continue
+            chave = f"{slot_id}|{nick}"
+            ultimo_score = notificados.get(chave, 0)
+            if score > ultimo_score:
+                notificados[chave] = score
+                enviar_alerta(nick, clan, score, lugar, slot_id, server_key)
+    nicks_ativos = set()
+    for slot in slots:
+        for j in slot.get("top10", []):
+            nicks_ativos.add(f"{slot.get('slotId')}|{j.get('nick','')}")
+    for chave in list(notificados.keys()):
+        if chave not in nicks_ativos:
+            del notificados[chave]
+
+if __name__ == "__main__":
+    print(f"Slither Monitor iniciado! Verificando a cada {INTERVALO_VERIFICACAO}s...")
+    while True:
+        print(f"Verificando... {time.strftime('%H:%M:%S')}")
+        verificar_ranking()
+        time.sleep(INTERVALO_VERIFICACAO)
+'''
+
+# Criar a pasta do projeto
+os.makedirs("slither-bot", exist_ok=True)
+os.chdir("slither-bot")
+
+# Criar os arquivos
+with open("slither_bot.py", "w") as f:
+    f.write(SLITHER_BOT)
+
+with open("requirements.txt", "w") as f:
+    f.write("requests\n")
+
+with open("Procfile", "w") as f:
+    f.write("worker: python slither_bot.py\n")
+
+print("Arquivos criados!")
+
+# Inicializar git e fazer push
+commands = [
+    "git init",
+    "git add .",
+    'git commit -m "Add slither bot"',
+    "git branch -M main",
+    "git remote add origin https://github.com/JanMarchi/slither-bot.git",
+    "git push -u origin main"
+]
+
+for cmd in commands:
+    print(f"Executando: {cmd}")
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"ERRO: {result.stderr}")
+    else:
+        print(f"OK: {result.stdout[:100]}")
+
+print("PRONTO! Repositório enviado para GitHub.")
