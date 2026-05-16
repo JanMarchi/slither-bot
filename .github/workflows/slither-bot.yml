@@ -28,6 +28,7 @@ jobs:
           WEBHOOK_URL = "https://discord.com/api/webhooks/1505020954638553179/MA5J5g4DDBVlQuOylUeZX1qeroTpzU4G5E3LcmyeOUTnE-0KjlcaW6uEQWEsXuf35cNa"
           API_URL = "https://slithermania.com.br/api/public/ranking-live"
           CLANS_MONITORADOS = ["Hard", "VIIP", "COBR", "ELITE"]
+          SCORE_LIMITE = 45000
           INTERVALO = 30
           DURACAO = 55 * 60
           def fmt(s): return f"{s:,}".replace(",",".")
@@ -37,7 +38,7 @@ jobs:
               return any(c.upper() in clan_upper for c in CLANS_MONITORADOS)
           def alerta(nick,clan,score,lugar,slot_id,sk):
               ct=f" [{clan}]" if clan else ""
-              embed={"title":f"Slither ALERTA - Clan {clan} detectado!","color":0x00FF88,"fields":[{"name":"Jogador","value":f"**{nick}**{ct}","inline":True},{"name":"Score Atual","value":f"**{fmt(score)} pontos**","inline":True},{"name":"Posicao","value":f"#{lugar}","inline":True},{"name":"Servidor","value":f"Slot {slot_id} - {sk}","inline":False}],"footer":{"text":"Slither Monitor - slithermania.com.br"},"timestamp":time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime())}
+              embed={"title":f"Slither ALERTA - Clan {clan} acima de 45.000!","color":0x00FF88,"fields":[{"name":"Jogador","value":f"**{nick}**{ct}","inline":True},{"name":"Score Atual","value":f"**{fmt(score)} pontos**","inline":True},{"name":"Posicao","value":f"#{lugar}","inline":True},{"name":"Servidor","value":f"Slot {slot_id} - {sk}","inline":False}],"footer":{"text":"Slither Monitor - slithermania.com.br"},"timestamp":time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime())}
               payload={"content":"@everyone","username":"Slither Monitor","embeds":[embed],"allowed_mentions":{"parse":["everyone"]}}
               try:
                   r=requests.post(WEBHOOK_URL,json=payload,timeout=10)
@@ -51,9 +52,10 @@ jobs:
                   sid=slot.get("slotId"); sk=slot.get("serverKey","?")
                   for j in slot.get("top10",[]):
                       clan=j.get("clan","")
-                      if clan_monitorado(clan):
-                          alerta(j.get("nick","?"),clan,j.get("score",0),j.get("place",0),sid,sk)
-          print(f"Slither Monitor iniciado! Clans: {CLANS_MONITORADOS}")
+                      score=j.get("score",0)
+                      if clan_monitorado(clan) and score > SCORE_LIMITE:
+                          alerta(j.get("nick","?"),clan,score,j.get("place",0),sid,sk)
+          print(f"Slither Monitor iniciado! Clans: {CLANS_MONITORADOS} | Score minimo: {fmt(SCORE_LIMITE)}")
           t=time.time()
           while time.time()-t<DURACAO:
               print(f"Verificando... {time.strftime('%H:%M:%S')}"); verificar(); time.sleep(INTERVALO)
